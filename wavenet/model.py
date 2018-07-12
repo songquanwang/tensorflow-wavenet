@@ -395,17 +395,19 @@ class WaveNetModel(object):
     def _create_network(self, input_batch, global_condition_batch):
         '''Construct the WaveNet network.'''
         outputs = []
+        #(1,105116,1)
         current_layer = input_batch
 
         # Pre-process the input with a regular convolution
         current_layer = self._create_causal_layer(current_layer)
-
+        # 105116-5117+1 =100000
         output_width = tf.shape(input_batch)[1] - self.receptive_field + 1
 
         # Add all defined dilation layers.
         with tf.name_scope('dilated_stack'):
             for layer_index, dilation in enumerate(self.dilations):
                 with tf.name_scope('layer{}'.format(layer_index)):
+                    # (?,?,512) (?,?,32)
                     output, current_layer = self._create_dilation_layer(
                         current_layer, layer_index, dilation,
                         global_condition_batch, output_width)
@@ -429,8 +431,10 @@ class WaveNetModel(object):
 
             # We skip connections from the outputs of each layer, adding them
             # all up here.
+            # (?,?,512) output 包含50个
             total = sum(outputs)
             transformed1 = tf.nn.relu(total)
+            # (?,?,512)
             conv1 = tf.nn.conv1d(transformed1, w1, stride=1, padding="SAME")
             if self.use_biases:
                 conv1 = tf.add(conv1, b1)
@@ -540,6 +544,7 @@ class WaveNetModel(object):
             # Only lookup the embedding if the global condition is presented
             # as an integer of mutually-exclusive categories ...
             embedding_table = self.variables['embeddings']['gc_embedding']
+            # (100)
             embedding = tf.nn.embedding_lookup(embedding_table,
                                                global_condition)
         elif global_condition is not None:
@@ -625,10 +630,12 @@ class WaveNetModel(object):
         '''
         with tf.name_scope(name):
             # We mu-law encode and quantize the input audioform.
+            # (1,105117,1) int
             encoded_input = mu_law_encode(input_batch,
                                           self.quantization_channels)
-
+            #(1,1,gc_channel)
             gc_embedding = self._embed_gc(global_condition_batch)
+            # (1,105117,256)
             encoded = self._one_hot(encoded_input)
             if self.scalar_input:
                 network_input = tf.reshape(
@@ -638,15 +645,18 @@ class WaveNetModel(object):
                 network_input = encoded
 
             # Cut off the last sample of network input to preserve causality.
+            # 105116
             network_input_width = tf.shape(network_input)[1] - 1
+            # 去掉最后一个
             network_input = tf.slice(network_input, [0, 0, 0],
                                      [-1, network_input_width, -1])
-
+            # (?,?,256)
             raw_output = self._create_network(network_input, gc_embedding)
 
             with tf.name_scope('loss'):
                 # Cut off the samples corresponding to the receptive field
                 # for the first predicted sample.
+                # (100000,256)
                 target_output = tf.slice(
                     tf.reshape(
                         encoded,

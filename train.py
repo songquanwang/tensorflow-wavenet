@@ -51,24 +51,24 @@ def get_arguments():
                         help='The directory containing the VCTK corpus.')
     parser.add_argument('--store_metadata', type=bool, default=METADATA,
                         help='Whether to store advanced debugging information '
-                        '(execution time, memory consumption) for use with '
-                        'TensorBoard. Default: ' + str(METADATA) + '.')
+                             '(execution time, memory consumption) for use with '
+                             'TensorBoard. Default: ' + str(METADATA) + '.')
     parser.add_argument('--logdir', type=str, default=None,
                         help='Directory in which to store the logging '
-                        'information for TensorBoard. '
-                        'If the model already exists, it will restore '
-                        'the state and will continue training. '
-                        'Cannot use with --logdir_root and --restore_from.')
+                             'information for TensorBoard. '
+                             'If the model already exists, it will restore '
+                             'the state and will continue training. '
+                             'Cannot use with --logdir_root and --restore_from.')
     parser.add_argument('--logdir_root', type=str, default=None,
                         help='Root directory to place the logging '
-                        'output and generated model. These are stored '
-                        'under the dated subdirectory of --logdir_root. '
-                        'Cannot use with --logdir.')
+                             'output and generated model. These are stored '
+                             'under the dated subdirectory of --logdir_root. '
+                             'Cannot use with --logdir.')
     parser.add_argument('--restore_from', type=str, default=None,
                         help='Directory in which to restore the model from. '
-                        'This creates the new model under the dated directory '
-                        'in --logdir_root. '
-                        'Cannot use with --logdir.')
+                             'This creates the new model under the dated directory '
+                             'in --logdir_root. '
+                             'Cannot use with --logdir.')
     parser.add_argument('--checkpoint_every', type=int,
                         default=CHECKPOINT_EVERY,
                         help='How many steps to save each checkpoint after. Default: ' + str(CHECKPOINT_EVERY) + '.')
@@ -80,22 +80,22 @@ def get_arguments():
                         help='JSON file with the network parameters. Default: ' + WAVENET_PARAMS + '.')
     parser.add_argument('--sample_size', type=int, default=SAMPLE_SIZE,
                         help='Concatenate and cut audio samples to this many '
-                        'samples. Default: ' + str(SAMPLE_SIZE) + '.')
+                             'samples. Default: ' + str(SAMPLE_SIZE) + '.')
     parser.add_argument('--l2_regularization_strength', type=float,
                         default=L2_REGULARIZATION_STRENGTH,
                         help='Coefficient in the L2 regularization. '
-                        'Default: False')
+                             'Default: False')
     parser.add_argument('--silence_threshold', type=float,
                         default=SILENCE_THRESHOLD,
                         help='Volume threshold below which to trim the start '
-                        'and the end from the training set samples. Default: ' + str(SILENCE_THRESHOLD) + '.')
+                             'and the end from the training set samples. Default: ' + str(SILENCE_THRESHOLD) + '.')
     parser.add_argument('--optimizer', type=str, default='adam',
                         choices=optimizer_factory.keys(),
                         help='Select the optimizer specified by this option. Default: adam.')
     parser.add_argument('--momentum', type=float,
                         default=MOMENTUM, help='Specify the momentum to be '
-                        'used by sgd or rmsprop optimizer. Ignored by the '
-                        'adam optimizer. Default: ' + str(MOMENTUM) + '.')
+                                               'used by sgd or rmsprop optimizer. Ignored by the '
+                                               'adam optimizer. Default: ' + str(MOMENTUM) + '.')
     parser.add_argument('--histograms', type=_str_to_bool, default=False,
                         help='Whether to store histogram summaries. Default: False')
     parser.add_argument('--gc_channels', type=int, default=None,
@@ -212,26 +212,33 @@ def main():
     with tf.name_scope('create_inputs'):
         # Allow silence trimming to be skipped by specifying a threshold near
         # zero.
+        # 0.3
         silence_threshold = args.silence_threshold if args.silence_threshold > \
                                                       EPSILON else None
         gc_enabled = args.gc_channels is not None
-        reader = AudioReader(
-            args.data_dir,
-            coord,
-            sample_rate=wavenet_params['sample_rate'],
-            gc_enabled=gc_enabled,
-            receptive_field=WaveNetModel.calculate_receptive_field(wavenet_params["filter_width"],
-                                                                   wavenet_params["dilations"],
-                                                                   wavenet_params["scalar_input"],
-                                                                   wavenet_params["initial_filter_width"]),
-            sample_size=args.sample_size,
-            silence_threshold=silence_threshold)
-        audio_batch = reader.dequeue(args.batch_size)
-        if gc_enabled:
-            gc_id_batch = reader.dequeue_gc(args.batch_size)
-        else:
-            gc_id_batch = None
 
+        # reader = AudioReader(
+        #     args.data_dir,
+        #     coord,
+        #     sample_rate=wavenet_params['sample_rate'],
+        #     gc_enabled=gc_enabled,
+        #     receptive_field=WaveNetModel.calculate_receptive_field(wavenet_params["filter_width"],
+        #                                                            wavenet_params["dilations"],
+        #                                                            wavenet_params["scalar_input"],
+        #                                                            wavenet_params["initial_filter_width"]),
+        #     sample_size=args.sample_size,
+        #     silence_threshold=silence_threshold)
+        # # 如果batch_size =1 则audio_batch shape(1,105117,1)
+        # audio_batch = reader.dequeue(args.batch_size)
+        # if gc_enabled:
+        #     gc_id_batch = reader.dequeue_gc(args.batch_size)
+        # else:
+        #     gc_id_batch = None
+
+    # mock sqw
+    audio_batch = tf.constant(value=1, dtype=tf.int32, shape=(1, 105117, 1))
+    gc_id_batch = tf.constant(value=1, dtype=tf.int32, shape=(1,))
+    args.gc_channels = 100
     # Create network.
     net = WaveNetModel(
         batch_size=args.batch_size,
@@ -246,7 +253,8 @@ def main():
         initial_filter_width=wavenet_params["initial_filter_width"],
         histograms=args.histograms,
         global_condition_channels=args.gc_channels,
-        global_condition_cardinality=reader.gc_category_cardinality)
+        # global_condition_cardinality=reader.gc_category_cardinality) # update sqw
+        global_condition_cardinality=100)
 
     if args.l2_regularization_strength == 0:
         args.l2_regularization_strength = None
@@ -254,8 +262,8 @@ def main():
                     global_condition_batch=gc_id_batch,
                     l2_regularization_strength=args.l2_regularization_strength)
     optimizer = optimizer_factory[args.optimizer](
-                    learning_rate=args.learning_rate,
-                    momentum=args.momentum)
+        learning_rate=args.learning_rate,
+        momentum=args.momentum)
     trainable = tf.trainable_variables()
     optim = optimizer.minimize(loss, var_list=trainable)
 
@@ -287,7 +295,7 @@ def main():
         raise
 
     threads = tf.train.start_queue_runners(sess=sess, coord=coord)
-    reader.start_threads(sess)
+    # reader.start_threads(sess)
 
     step = None
     last_saved_step = saved_global_step

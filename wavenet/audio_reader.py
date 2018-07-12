@@ -97,15 +97,22 @@ class AudioReader(object):
                  sample_size=None,
                  silence_threshold=None,
                  queue_size=32):
+        # ./VCTK-Corpus
         self.audio_dir = audio_dir
+        # 16000
         self.sample_rate = sample_rate
         self.coord = coord
+        # 100000
         self.sample_size = sample_size
+        # 5117
         self.receptive_field = receptive_field
+        # 0.3
         self.silence_threshold = silence_threshold
+        # False
         self.gc_enabled = gc_enabled
         self.threads = []
         self.sample_placeholder = tf.placeholder(dtype=tf.float32, shape=None)
+        # 32
         self.queue = tf.PaddingFIFOQueue(queue_size,
                                          ['float32'],
                                          shapes=[(None, 1)])
@@ -168,18 +175,20 @@ class AudioReader(object):
                               "silence. Consider decreasing trim_silence "
                               "threshold, or adjust volume of the audio."
                               .format(filename))
-
+                # （上边，左边）（下边，右边） 上边补充 5117
                 audio = np.pad(audio, [[self.receptive_field, 0], [0, 0]],
                                'constant')
-
+                #:（0:5117+100000，100000:100000+5117+100000） 每个piece长 5117+10万 ;每次滑动10万
                 if self.sample_size:
                     # Cut samples into pieces of size receptive_field +
                     # sample_size with receptive_field overlap
                     while len(audio) > self.receptive_field:
+                        # 0--105117
                         piece = audio[:(self.receptive_field +
                                         self.sample_size), :]
                         sess.run(self.enqueue,
                                  feed_dict={self.sample_placeholder: piece})
+                        # 100000：
                         audio = audio[self.sample_size:, :]
                         if self.gc_enabled:
                             sess.run(self.gc_enqueue, feed_dict={

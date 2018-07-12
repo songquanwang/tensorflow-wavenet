@@ -68,9 +68,11 @@ def mu_law_encode(audio, quantization_channels):
         # Perform mu-law companding transformation (ITU-T, 1988).
         # Minimum operation is here to deal with rare large amplitudes caused
         # by resampling.
-        safe_audio_abs = tf.minimum(tf.abs(audio), 1.0)
+        # sqw update
+        f_audio =tf.to_float(audio)
+        safe_audio_abs = tf.minimum(tf.abs(f_audio), 1.0)
         magnitude = tf.log1p(mu * safe_audio_abs) / tf.log1p(mu)
-        signal = tf.sign(audio) * magnitude
+        signal = tf.sign(f_audio) * magnitude
         # Quantize signal to the specified number of levels.
         return tf.to_int32((signal + 1) / 2 * mu + 0.5)
 
