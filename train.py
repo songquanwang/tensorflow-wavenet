@@ -187,7 +187,8 @@ def validate_directories(args):
 
 def main():
     args = get_arguments()
-
+    # 参数设置
+    args.gc_channels = 32
     try:
         directories = validate_directories(args)
     except ValueError as e:
@@ -217,28 +218,28 @@ def main():
                                                       EPSILON else None
         gc_enabled = args.gc_channels is not None
 
-        # reader = AudioReader(
-        #     args.data_dir,
-        #     coord,
-        #     sample_rate=wavenet_params['sample_rate'],
-        #     gc_enabled=gc_enabled,
-        #     receptive_field=WaveNetModel.calculate_receptive_field(wavenet_params["filter_width"],
-        #                                                            wavenet_params["dilations"],
-        #                                                            wavenet_params["scalar_input"],
-        #                                                            wavenet_params["initial_filter_width"]),
-        #     sample_size=args.sample_size,
-        #     silence_threshold=silence_threshold)
-        # # 如果batch_size =1 则audio_batch shape(1,105117,1)
-        # audio_batch = reader.dequeue(args.batch_size)
-        # if gc_enabled:
-        #     gc_id_batch = reader.dequeue_gc(args.batch_size)
-        # else:
-        #     gc_id_batch = None
+        reader = AudioReader(
+            args.data_dir,
+            coord,
+            sample_rate=wavenet_params['sample_rate'],
+            gc_enabled=gc_enabled,
+            receptive_field=WaveNetModel.calculate_receptive_field(wavenet_params["filter_width"],
+                                                                   wavenet_params["dilations"],
+                                                                   wavenet_params["scalar_input"],
+                                                                   wavenet_params["initial_filter_width"]),
+            sample_size=args.sample_size,
+            silence_threshold=silence_threshold)
+        # 如果batch_size =1 则audio_batch shape(1,?,1)
+        audio_batch = reader.dequeue(args.batch_size)
+        if gc_enabled:
+            gc_id_batch = reader.dequeue_gc(args.batch_size)
+        else:
+            gc_id_batch = None
 
     # mock sqw
-    audio_batch = tf.constant(value=1, dtype=tf.int32, shape=(1, 105117, 1))
-    gc_id_batch = tf.constant(value=1, dtype=tf.int32, shape=(1,))
-    args.gc_channels = 100
+    # audio_batch = tf.constant(value=1, dtype=tf.int32, shape=(1, 105117, 1))
+    # gc_id_batch = tf.constant(value=1, dtype=tf.int32, shape=(1,))
+    # args.gc_channels = 100
     # Create network.
     net = WaveNetModel(
         batch_size=args.batch_size,
@@ -253,8 +254,8 @@ def main():
         initial_filter_width=wavenet_params["initial_filter_width"],
         histograms=args.histograms,
         global_condition_channels=args.gc_channels,
-        # global_condition_cardinality=reader.gc_category_cardinality) # update sqw
-        global_condition_cardinality=100)
+        global_condition_cardinality=reader.gc_category_cardinality) # update sqw
+        # global_condition_cardinality=100)
 
     if args.l2_regularization_strength == 0:
         args.l2_regularization_strength = None
@@ -295,7 +296,7 @@ def main():
         raise
 
     threads = tf.train.start_queue_runners(sess=sess, coord=coord)
-    # reader.start_threads(sess)
+    reader.start_threads(sess)
 
     step = None
     last_saved_step = saved_global_step

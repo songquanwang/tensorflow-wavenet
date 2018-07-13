@@ -46,8 +46,10 @@ def load_generic_audio(directory, sample_rate):
     files = find_files(directory)
     id_reg_exp = re.compile(FILE_PATTERN)
     print("files length: {}".format(len(files)))
+    # 随机选择文件
     randomized_files = randomize_files(files)
     for filename in randomized_files:
+        #[('227','015')]
         ids = id_reg_exp.findall(filename)
         if not ids:
             # The file name does not match the pattern containing ids, so
@@ -55,7 +57,9 @@ def load_generic_audio(directory, sample_rate):
             category_id = None
         else:
             # The file name matches the pattern for containing ids.
+            # 227 类别
             category_id = int(ids[0][0])
+        # （113352,1)
         audio, _ = librosa.load(filename, sr=sample_rate, mono=True)
         audio = audio.reshape(-1, 1)
         yield audio, filename, category_id
@@ -108,7 +112,7 @@ class AudioReader(object):
         self.receptive_field = receptive_field
         # 0.3
         self.silence_threshold = silence_threshold
-        # False
+        # True
         self.gc_enabled = gc_enabled
         self.threads = []
         self.sample_placeholder = tf.placeholder(dtype=tf.float32, shape=None)
@@ -116,8 +120,9 @@ class AudioReader(object):
         self.queue = tf.PaddingFIFOQueue(queue_size,
                                          ['float32'],
                                          shapes=[(None, 1)])
+        # 只是一个假动作，真正进入队列时候是在sess run
         self.enqueue = self.queue.enqueue([self.sample_placeholder])
-
+        # True
         if self.gc_enabled:
             self.id_placeholder = tf.placeholder(dtype=tf.int32, shape=())
             self.gc_queue = tf.PaddingFIFOQueue(queue_size, ['int32'],
@@ -136,6 +141,7 @@ class AudioReader(object):
         # Determine the number of mutually-exclusive categories we will
         # accomodate in our embedding table.
         if self.gc_enabled:
+            # 最大的文件 id
             _, self.gc_category_cardinality = get_category_cardinality(files)
             # Add one to the largest index to get the number of categories,
             # since tf.nn.embedding_lookup expects zero-indexing. This

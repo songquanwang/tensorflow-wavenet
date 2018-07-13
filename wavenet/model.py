@@ -543,8 +543,9 @@ class WaveNetModel(object):
         if self.global_condition_cardinality is not None:
             # Only lookup the embedding if the global condition is presented
             # as an integer of mutually-exclusive categories ...
+            # 230 中声音 32
             embedding_table = self.variables['embeddings']['gc_embedding']
-            # (100)
+            # (1,32)
             embedding = tf.nn.embedding_lookup(embedding_table,
                                                global_condition)
         elif global_condition is not None:
@@ -633,9 +634,9 @@ class WaveNetModel(object):
             # (1,105117,1) int
             encoded_input = mu_law_encode(input_batch,
                                           self.quantization_channels)
-            #(1,1,gc_channel)
+            #(1,1,32)
             gc_embedding = self._embed_gc(global_condition_batch)
-            # (1,105117,256)
+            # (1,?,256)
             encoded = self._one_hot(encoded_input)
             if self.scalar_input:
                 network_input = tf.reshape(
