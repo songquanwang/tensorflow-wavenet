@@ -35,7 +35,7 @@ def time_to_batch(value, dilation, name=None):
 
 
 def batch_to_time(value, dilation, name=None):
-    with tf.name_scope('batch_to_time'):
+    with tf.name_scope('batch_to_time'): #
         shape = tf.shape(value)
         prepared = tf.reshape(value, [dilation, -1, shape[2]])
         transposed = tf.transpose(prepared, perm=[1, 0, 2])
@@ -44,10 +44,10 @@ def batch_to_time(value, dilation, name=None):
 
 
 def causal_conv(value, filter_, dilation, name='causal_conv'):
-    with tf.name_scope(name):
+    with tf.name_scope(name): # values :(batch,ts,channels)  filters:(2,256,32)
         filter_width = tf.shape(filter_)[0]
-        if dilation > 1:
-            transformed = time_to_batch(value, dilation)
+        if dilation > 1: #(batch*dilation,ts/2, channels)
+            transformed = time_to_batch(value, dilation) # (batch*dilation,ts/2 -1, channels)
             conv = tf.nn.conv1d(transformed, filter_, stride=1,
                                 padding='VALID')
             restored = batch_to_time(conv, dilation)

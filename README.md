@@ -100,7 +100,8 @@ it should build a model that includes global conditioning.
 * It specifies the
 size of the embedding vector that is looked up based on the id of the speaker.
 
-The global conditioning logic in train.py and audio_reader.py is "hard-wired" to the VCTK corpus at the moment in that it expects to be able to determine the speaker id from the pattern of file naming used in VCTK, but can be easily be modified.
+The global conditioning logic in train.py and audio_reader.py is "hard-wired" to the VCTK corpus at the moment in that it expects to
+ be able to determine the speaker id from the pattern of file naming used in VCTK, but can be easily be modified.
 
 ## Generating audio
 

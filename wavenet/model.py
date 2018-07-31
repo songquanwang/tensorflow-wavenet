@@ -5,14 +5,27 @@ from .ops import causal_conv, mu_law_encode
 
 
 def create_variable(name, shape):
-    '''Create a convolution filter variable with the specified name and shape,
-    and initialize it using Xavier initialition.'''
+    """
+    Create a convolution filter variable with the specified name and shape,
+    and initialize it using Xavier initialition.
+    如果激活函数使用sigmoid和tanh,怎最好使用xavir
+    :param name:
+    :param shape:
+    :return:
+    """
     initializer = tf.contrib.layers.xavier_initializer_conv2d()
     variable = tf.Variable(initializer(shape=shape), name=name)
     return variable
 
 
 def create_embedding_table(name, shape):
+    """
+    如果是方阵，说要要生成one_hot table 每行一个1
+    否则，用Xavier初始化矩阵
+    :param name:
+    :param shape:
+    :return:
+    """
     if shape[0] == shape[1]:
         # Make a one-hot encoding as the initial value.
         initial_val = np.identity(n=shape[0], dtype=np.float32)
@@ -22,8 +35,13 @@ def create_embedding_table(name, shape):
 
 
 def create_bias_variable(name, shape):
-    '''Create a bias variable with the specified name and shape and initialize
-    it to zero.'''
+    """
+    Create a bias variable with the specified name and shape and initialize
+    it to zero.
+    :param name:
+    :param shape:
+    :return:
+    """
     initializer = tf.constant_initializer(value=0.0, dtype=tf.float32)
     return tf.Variable(initializer(shape=shape), name)
 
@@ -50,7 +68,7 @@ class WaveNetModel(object):
                  residual_channels,
                  dilation_channels,
                  skip_channels,
-                 quantization_channels=2**8,
+                 quantization_channels=2 ** 8,
                  use_biases=False,
                  scalar_input=False,
                  initial_filter_width=32,
@@ -133,6 +151,9 @@ class WaveNetModel(object):
 
         with tf.variable_scope('wavenet'):
             if self.global_condition_cardinality is not None:
+                # 如果输入不是互斥类别；或者已经embedding好的向量 则不需要one_hot embedding
+                # 如果想生成 某个人的声音，则需要 两者相等
+                # 例如：230个人的声音，则230*230;如果不等，则相当于聚类
                 # We only look up the embedding if we are conditioning on a
                 # set of mutually-exclusive categories. We can also condition
                 # on an already-embedded dense vector, in which case it's
@@ -146,13 +167,16 @@ class WaveNetModel(object):
                         [self.global_condition_cardinality,
                          self.global_condition_channels])
                     var['embeddings'] = layer
-
+            # scalar，声音没有分通道（1）
+            # initial_channels-(initial_filter_width)-residual_channels
             with tf.variable_scope('causal_layer'):
                 layer = dict()
+                # scalar_input True时候，init_filter_filter才有效
                 if self.scalar_input:
                     initial_channels = 1
                     initial_filter_width = self.initial_filter_width
                 else:
+                    # 256
                     initial_channels = self.quantization_channels
                     initial_filter_width = self.filter_width
                 layer['filter'] = create_variable(
@@ -163,6 +187,9 @@ class WaveNetModel(object):
                 var['causal_layer'] = layer
 
             var['dilated_stack'] = list()
+            # residual_channels-(filter_width)-dilation_channels -->
+            # dense: dilation_channels--(1)--residual_channels
+            # skip : dilation_channels--(1)--skip_channels
             with tf.variable_scope('dilated_stack'):
                 for i, dilation in enumerate(self.dilations):
                     with tf.variable_scope('layer{}'.format(i)):
@@ -395,10 +422,11 @@ class WaveNetModel(object):
     def _create_network(self, input_batch, global_condition_batch):
         '''Construct the WaveNet network.'''
         outputs = []
-        #(1,105116,1)
+        # (1,105116,1)
         current_layer = input_batch
 
         # Pre-process the input with a regular convolution
+        # 预处理，初次卷积
         current_layer = self._create_causal_layer(current_layer)
         # 105116-5117+1 =100000
         output_width = tf.shape(input_batch)[1] - self.receptive_field + 1
@@ -465,13 +493,12 @@ class WaveNetModel(object):
         push_ops.append(push)
 
         current_layer = self._generator_causal_layer(
-                            current_layer, current_state)
+            current_layer, current_state)
 
         # Add all defined dilation layers.
         with tf.name_scope('dilated_stack'):
             for layer_index, dilation in enumerate(self.dilations):
                 with tf.name_scope('layer{}'.format(layer_index)):
-
                     q = tf.FIFOQueue(
                         dilation,
                         dtypes=tf.float32,
@@ -523,7 +550,7 @@ class WaveNetModel(object):
         This allows the definition of the network as a categorical distribution
         over a finite set of possible amplitudes.
         '''
-        with tf.name_scope('one_hot_encode'):
+        with tf.name_scope('one_hot_encode'):  # (1,?,1,256)
             encoded = tf.one_hot(
                 input_batch,
                 depth=self.quantization_channels,
@@ -572,10 +599,17 @@ class WaveNetModel(object):
         return embedding
 
     def predict_proba(self, waveform, global_condition=None, name='wavenet'):
-        '''Computes the probability distribution of the next sample based on
+        """
+        Computes the probability distribution of the next sample based on
         all samples in the input waveform.
         If you want to generate audio by feeding the output of the network back
-        as an input, see predict_proba_incremental for a faster alternative.'''
+        as an input, see predict_proba_incremental for a faster alternative.
+
+        :param waveform:
+        :param global_condition:
+        :param name:
+        :return:
+        """
         with tf.name_scope(name):
             if self.scalar_input:
                 encoded = tf.cast(waveform, tf.float32)
@@ -597,9 +631,16 @@ class WaveNetModel(object):
 
     def predict_proba_incremental(self, waveform, global_condition=None,
                                   name='wavenet'):
-        '''Computes the probability distribution of the next sample
+        """
+        Computes the probability distribution of the next sample
         incrementally, based on a single sample and all previously passed
-        samples.'''
+        samples.
+        只返回最后一天结果
+        :param waveform:
+        :param global_condition:
+        :param name:
+        :return:
+        """
         if self.filter_width > 2:
             raise NotImplementedError("Incremental generation does not "
                                       "support filter_width > 2.")
@@ -634,9 +675,9 @@ class WaveNetModel(object):
             # (1,105117,1) int
             encoded_input = mu_law_encode(input_batch,
                                           self.quantization_channels)
-            #(1,1,32)
+            # (1,1,32)  每个channel 是个on_hot 编码
             gc_embedding = self._embed_gc(global_condition_batch)
-            # (1,?,256)
+            # (1,?,256) 最后一个是one_hot 256个通道
             encoded = self._one_hot(encoded_input)
             if self.scalar_input:
                 network_input = tf.reshape(
@@ -681,7 +722,7 @@ class WaveNetModel(object):
                     # L2 regularization for all trainable parameters
                     l2_loss = tf.add_n([tf.nn.l2_loss(v)
                                         for v in tf.trainable_variables()
-                                        if not('bias' in v.name)])
+                                        if not ('bias' in v.name)])
 
                     # Add the regularization term to the loss
                     total_loss = (reduced_loss +

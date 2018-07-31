@@ -182,6 +182,7 @@ class AudioReader(object):
                               "threshold, or adjust volume of the audio."
                               .format(filename))
                 # （上边，左边）（下边，右边） 上边补充 5117
+                # [上行数，下行数],[左列数，右边列数]
                 audio = np.pad(audio, [[self.receptive_field, 0], [0, 0]],
                                'constant')
                 #:（0:5117+100000，100000:100000+5117+100000） 每个piece长 5117+10万 ;每次滑动10万

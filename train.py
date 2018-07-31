@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Training script for the WaveNet network on the VCTK corpus.
 
 This script trains a network with the WaveNet using data from the VCTK corpus,
@@ -33,6 +34,7 @@ SILENCE_THRESHOLD = 0.3
 EPSILON = 0.001
 MOMENTUM = 0.9
 MAX_TO_KEEP = 5
+# 是否保存metadata
 METADATA = False
 
 
@@ -164,11 +166,13 @@ def validate_directories(args):
 
     # Arrangement
     logdir_root = args.logdir_root
+    # ./logdir
     if logdir_root is None:
         logdir_root = LOGDIR_ROOT
 
     logdir = args.logdir
     if logdir is None:
+        # ./logdir/train/2018-07-31T**-**-**
         logdir = get_default_logdir(logdir_root)
         print('Using default logdir: {}'.format(logdir))
 
@@ -186,7 +190,12 @@ def validate_directories(args):
 
 
 def main():
+    """
+    一个线程生成数据，主线程训练
+    :return:
+    """
     args = get_arguments()
+    # 2018-07-31T15-34-51/model.ckpt-100
     # 参数设置
     args.gc_channels = 32
     try:
@@ -201,6 +210,7 @@ def main():
 
     # Even if we restored the model, we will treat it as new training
     # if the trained model is written into an arbitrary location.
+    # 路径相等，不要覆盖
     is_overwritten_training = logdir != restore_from
 
     with open(args.wavenet_params, 'r') as f:
@@ -302,6 +312,7 @@ def main():
     last_saved_step = saved_global_step
     try:
         for step in range(saved_global_step + 1, args.num_steps):
+            print("****************************{0}".format(step))
             start_time = time.time()
             if args.store_metadata and step % 50 == 0:
                 # Slow run that stores extra information for debugging.
@@ -338,6 +349,7 @@ def main():
     finally:
         if step > last_saved_step:
             save(saver, sess, logdir, step)
+
         coord.request_stop()
         coord.join(threads)
 

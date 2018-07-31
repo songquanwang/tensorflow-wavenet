@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from __future__ import division
 from __future__ import print_function
 
@@ -32,7 +33,7 @@ def get_arguments():
         """Ensure argument is a positive float."""
         if float(f) < 0:
             raise argparse.ArgumentTypeError(
-                    'Argument must be greater than zero')
+                'Argument must be greater than zero')
         return float(f)
 
     parser = argparse.ArgumentParser(description='WaveNet generation script')
@@ -53,7 +54,7 @@ def get_arguments():
         type=str,
         default=LOGDIR,
         help='Directory in which to store the logging '
-        'information for TensorBoard.')
+             'information for TensorBoard.')
     parser.add_argument(
         '--wavenet_params',
         type=str,
@@ -104,8 +105,8 @@ def get_arguments():
 
         if arguments.gc_id is None:
             raise ValueError("Globally conditioning, but global condition was "
-                              "not specified. Use --gc_id to specify global "
-                              "condition.")
+                             "not specified. Use --gc_id to specify global "
+                             "condition.")
 
     return arguments
 
@@ -125,6 +126,7 @@ def create_seed(filename,
     audio = audio_reader.trim_silence(audio, silence_threshold)
 
     quantized = mu_law_encode(audio, quantization_channels)
+    # 长度不超过window_size
     cut_index = tf.cond(tf.size(quantized) < tf.constant(window_size),
                         lambda: tf.size(quantized),
                         lambda: tf.constant(window_size))
@@ -158,6 +160,7 @@ def main():
     samples = tf.placeholder(tf.int32)
 
     if args.fast_generation:
+        #(256,)
         next_sample = net.predict_proba_incremental(samples, args.gc_id)
     else:
         next_sample = net.predict_proba(samples, args.gc_id)
@@ -172,12 +175,15 @@ def main():
     saver = tf.train.Saver(variables_to_restore)
 
     print('Restoring model from {}'.format(args.checkpoint))
-    saver.restore(sess, args.checkpoint)
+    # ckpt = tf.train.get_checkpoint_state(args.checkpoint)
+    ckpt = tf.train.get_checkpoint_state('./logdir/train/2018-07-31T15-34-51')
+    saver.restore(sess, ckpt.model_checkpoint_path)
 
     decode = mu_law_decode(samples, wavenet_params['quantization_channels'])
 
     quantization_channels = wavenet_params['quantization_channels']
     if args.wav_seed:
+        # 长度 receptive_field的真实样本
         seed = create_seed(args.wav_seed,
                            wavenet_params['sample_rate'],
                            quantization_channels,
@@ -185,6 +191,7 @@ def main():
         waveform = sess.run(seed).tolist()
     else:
         # Silence with a single random sample at the end.
+        # 长度是receptive_field, 除了最后一个是随机数，都是128
         waveform = [quantization_channels / 2] * (net.receptive_field - 1)
         waveform.append(np.random.randint(quantization_channels))
 
@@ -205,8 +212,9 @@ def main():
             sess.run(outputs, feed_dict={samples: x})
         print('Done.')
 
-    last_sample_timestamp = datetime.now()
+    last_sample_timestamp = datetime.now() #args.sample=16000
     for step in range(args.samples):
+        # 根据最后一个预测
         if args.fast_generation:
             outputs = [next_sample]
             outputs.extend(net.push_ops)
@@ -219,6 +227,7 @@ def main():
             outputs = [next_sample]
 
         # Run the WaveNet to predict the next sample.
+        #(256,)
         prediction = sess.run(outputs, feed_dict={samples: window})[0]
 
         # Scale prediction distribution using temperature.
@@ -233,9 +242,9 @@ def main():
         # scaling.
         if args.temperature == 1.0:
             np.testing.assert_allclose(
-                    prediction, scaled_prediction, atol=1e-5,
-                    err_msg='Prediction scaling at temperature=1.0 '
-                            'is not working as intended.')
+                prediction, scaled_prediction, atol=1e-5,
+                err_msg='Prediction scaling at temperature=1.0 '
+                        'is not working as intended.')
 
         sample = np.random.choice(
             np.arange(quantization_channels), p=scaled_prediction)
